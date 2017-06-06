@@ -1,33 +1,68 @@
-# History files
-.Rhistory
-.Rapp.history
+library(tm)
+library(data.table)
+library(topicmodels)
+library(tidytext)
+library(ggplot2)
+library(dplyr)
 
-# Session Data files
-.RData
+#establecer directorio
+setwd("~/rstudio_script")
+tweets = fread("tweets.csv")
+tweetcorpus=VCorpus(VectorSource(tweets$text))
+tweetcorpus <- tm_map(tweetcorpus, content_transformer(tolower))
 
-# Example code in package build process
-*-Ex.R
+# eliminar puntuación
+tweetcorpus <- tm_map(tweetcorpus, removePunctuation) 
+# eliminar números
+tweetcorpus <- tm_map(tweetcorpus, removeNumbers)
+# eliminar stopwords
+tweetcorpus <- tm_map(tweetcorpus, removeWords, stopwords("english"))
+tweetcorpus <- tm_map(tweetcorpus, removeWords, stopwords("spanish"))
+tweetcorpus <- tm_map(tweetcorpus, removeWords, stopwords("catalan"))
 
-# Output files from R CMD build
-/*.tar.gz
+# eliminar palabras comunes que no son de ayuda
+tweetcorpus <- tm_map(tweetcorpus, removeWords, c("barcelona"))
 
-# Output files from R CMD check
-/*.Rcheck/
+# eliminar URLs
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+tweetcorpus <- tm_map(tweetcorpus, content_transformer(removeURL))
+# eliminar espacios en blanco
+tweetcorpus = tm_map(tweetcorpus, stripWhitespace)
 
-# RStudio files
-.Rproj.user/
+#filtrar base de datos por palabras clave
+keywords = c("crim","crimen","crime","robo","robado","robatori","furt","denuncia","atraco","hurto","theft","robbery","inseguridad","insecure","insecurity","inseguretat","threat","amenaza","pelea", "fight","baralla","degradado","degradat","delito","delicte","offense","offence","odi","odio","hate","maltrato","maltracte","victima","victim","policia","police","herid","ferit","ferida","arma","weapon","violencia","violence","acos","abuse","agresion","agressio","aggression","disturbio","riot","sirena","bullying","stalking","droga","drugs","drogues","camello","dealer","sobredosis","sospechoso","sospitos","suspicious","detenido","detingut","detention","miedo","incivism","incivic")
+filtered_tweetcorpus = tm_filter(tweetcorpus, FUN = function(x) any(grep(paste(keywords, collapse="|"),content(x))))
+filtered_tweetcorpus
 
-# produced vignettes
-vignettes/*.html
-vignettes/*.pdf
+tweetdtm = DocumentTermMatrix(filtered_tweetcorpus, control=list(wordLengths=c(2, 140)))
 
-# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
-.httr-oauth
+ui = unique(tweetdtm$i)
+tweetdtm = tweetdtm[ui,]
 
-# knitr and R markdown default cache directories
-/*_cache/
-/cache/
+#establecer los temas principales según probabilidad
+tweet_lda = LDA(tweetdtm, k = 3, control = list(seed = 1234))
 
-# Temporary files created by R markdown
-*.utf8.md
-*.knit.md
+tweet_topics <- tidy(tweet_lda, matrix = "beta")
+tweet_topics
+
+tweet_top_terms <- tweet_topics %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+tweet_top_terms %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+high = tidy(tweet_lda, matrix = "gamma")
+tweet_classifications = high %>%
+  group_by(document) %>%
+  top_n(1, gamma) %>%
+  ungroup
+
+#Exportar a .Txt
+write.table(tidy(filtered_tweetcorpus), "C:/Users/Saray/Documents/rstudio_script/tweetfinal.txt", sep="\t")
