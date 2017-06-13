@@ -63,6 +63,16 @@ tweet_classifications = high %>%
   group_by(document) %>%
   top_n(1, gamma) %>%
   ungroup
+  
+# averiguar qué tweets han sido incluidos en cada modelo
+
+names(tweet_classifications)[1] = 'id'
+
+labelled_tweets = left_join(tidy(filtered_tweetcorpus), tweet_classifications, by='id')
+
+labelled_tweets_1 = filter(labelled_tweets, topic == 1)
+labelled_tweets_2 = filter(labelled_tweets, topic == 2)
+labelled_tweets_3 = filter(labelled_tweets, topic == 3)
 
 #Exportar a .Txt
 write.table(tidy(filtered_tweetcorpus), "C:/Users/Saray/Documents/rstudio_script/tweetfinal.txt", sep="\t")
